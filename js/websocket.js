@@ -29,54 +29,80 @@ function initWebSocket() {
 // Handle incoming WebSocket messages
 function handleWebSocketMessage(event) {
   const arrayBuffer = event.data;
+  console.log('Received WebSocket message, size:', arrayBuffer.byteLength, 'bytes');
+  
   if (AI_STATE.isPlaying && AI_CONFIG.Frame) {
     try {
+      console.log('Attempting to decode frame...');
       const parsedFrame = AI_CONFIG.Frame.decode(new Uint8Array(arrayBuffer));
-      console.debug('Received frame type:', Object.keys(parsedFrame)[0]);
+      
+      // Log EVERY frame received from the WebSocket
+      console.log('RECEIVED FRAME:', parsedFrame);
+      console.log('Frame type:', Object.keys(parsedFrame)[0]);
+      console.log('Full frame structure:', JSON.stringify(parsedFrame, null, 2));
 
       // Handle transcription messages
       if (parsedFrame?.transcription) {
-        console.log('Transcription received:', parsedFrame.transcription.text);
+        console.log('Transcription received:', parsedFrame.transcription);
+        console.log('Transcription text:', parsedFrame.transcription.text);
         AI_TRANSCRIPT.addMessageToTranscript(parsedFrame.transcription.text, 'user');
       }
       
-      // Handle AI response text messages (TextFrames with name="ai_response")
+      // Handle ALL text frames - more aggressive approach
       if (parsedFrame?.text) {
-        console.log('TextFrame received:', parsedFrame.text);
+        // Log detailed structure of the text frame
+        console.log('TextFrame DETECTED!', parsedFrame.text);
+        console.log('TextFrame ID:', parsedFrame.text.id);
+        console.log('TextFrame name:', parsedFrame.text.name);
+        console.log('TextFrame text:', parsedFrame.text.text);
         
-        if (parsedFrame.text.name === "ai_response") {
-          console.log('AI Response TextFrame detected!');
+        // More flexible way to detect AI responses - try multiple approaches
+        const isAIResponse = 
+          parsedFrame.text.name === "ai_response" || // Check explicit name
+          (parsedFrame.text.name && parsedFrame.text.name.includes('ai')) || // Check if name contains 'ai'
+          (!parsedFrame.text.name && parsedFrame.text.text); // Fallback: any text without specific name
+        
+        if (isAIResponse) {
+          console.log('AI Response detected by criteria:', isAIResponse);
           console.log('AI Response content:', parsedFrame.text.text);
           AI_TRANSCRIPT.addMessageToTranscript(parsedFrame.text.text, 'ai');
         } else {
-          console.log('TextFrame received but not an AI response (name=' + parsedFrame.text.name + ')');
+          // Display ALL TextFrames to see if we're receiving them
+          console.log('Unrecognized TextFrame - displaying anyway');
+          AI_TRANSCRIPT.addMessageToTranscript('[DEBUG] Text: ' + parsedFrame.text.text, 'system');
         }
       }
       
       // Handle audio messages
       if (parsedFrame?.audio) {
-        console.debug('Audio frame received, length:', parsedFrame.audio.audio.length);
+        console.log('Audio frame received:', parsedFrame.audio);
+        console.log('Audio data length:', parsedFrame.audio.audio.length);
+        console.log('Audio sample rate:', parsedFrame.audio.sampleRate);
+        console.log('Audio channels:', parsedFrame.audio.numChannels);
         AI_AUDIO.enqueueAudioFromProto(arrayBuffer);
       }
       
       // Handle bot interruption frame
       if (parsedFrame?.botInterruption) {
-        console.log('Bot interruption received, stopping AI audio');
+        console.log('Bot interruption received:', parsedFrame.botInterruption);
         handleBotInterruption();
       }
       
       // Handle end frame
       if (parsedFrame?.end) {
-        console.log('End frame received');
+        console.log('End frame received:', parsedFrame.end);
         AI_MAIN.stopAudio(true);
       }
     } catch (error) {
       console.error('Error decoding message:', error);
       console.error('ArrayBuffer size:', arrayBuffer.byteLength);
-      AI_TRANSCRIPT.addMessageToTranscript('Error processing message from server', 'system');
+      console.error('ArrayBuffer content (first 50 bytes):', new Uint8Array(arrayBuffer).slice(0, 50));
+      AI_TRANSCRIPT.addMessageToTranscript('Error processing message from server: ' + error.message, 'system');
     }
   } else {
     console.warn('Received message but AI_STATE.isPlaying is false or Frame is not initialized');
+    console.warn('AI_STATE.isPlaying:', AI_STATE.isPlaying);
+    console.warn('AI_CONFIG.Frame initialized:', !!AI_CONFIG.Frame);
   }
 }
 
