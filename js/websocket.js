@@ -9,6 +9,7 @@ function initWebSocket() {
     return;
   }
 
+  console.log('Initializing WebSocket connection to ws://localhost:8765...');
   ws = new WebSocket('ws://localhost:8765');
   // This is so `event.data` is already an ArrayBuffer.
   ws.binaryType = 'arraybuffer';
@@ -19,7 +20,10 @@ function initWebSocket() {
     console.log('WebSocket connection closed.', event.code, event.reason);
     AI_MAIN.stopAudio(false);
   });
-  ws.addEventListener('error', (event) => console.error('WebSocket error:', event));
+  ws.addEventListener('error', (event) => {
+    console.error('WebSocket error:', event);
+    AI_TRANSCRIPT.addMessageToTranscript('WebSocket error occurred. Please check console for details.', 'system');
+  });
 }
 
 // Handle incoming WebSocket messages
@@ -28,22 +32,30 @@ function handleWebSocketMessage(event) {
   if (AI_STATE.isPlaying && AI_CONFIG.Frame) {
     try {
       const parsedFrame = AI_CONFIG.Frame.decode(new Uint8Array(arrayBuffer));
-      // Removed noisy log: console.log('Received frame:', parsedFrame);
+      console.debug('Received frame type:', Object.keys(parsedFrame)[0]);
 
       // Handle transcription messages
       if (parsedFrame?.transcription) {
-        console.log('Transcription:', parsedFrame.transcription.text); // Keep this useful log
+        console.log('Transcription received:', parsedFrame.transcription.text);
         AI_TRANSCRIPT.addMessageToTranscript(parsedFrame.transcription.text, 'user');
       }
       
       // Handle AI response text messages (TextFrames with name="ai_response")
-      if (parsedFrame?.text && parsedFrame.text.name === "ai_response") {
-        console.log('AI Response:', parsedFrame.text.text); // Log AI text response
-        AI_TRANSCRIPT.addMessageToTranscript(parsedFrame.text.text, 'ai');
+      if (parsedFrame?.text) {
+        console.log('TextFrame received:', parsedFrame.text);
+        
+        if (parsedFrame.text.name === "ai_response") {
+          console.log('AI Response TextFrame detected!');
+          console.log('AI Response content:', parsedFrame.text.text);
+          AI_TRANSCRIPT.addMessageToTranscript(parsedFrame.text.text, 'ai');
+        } else {
+          console.log('TextFrame received but not an AI response (name=' + parsedFrame.text.name + ')');
+        }
       }
       
       // Handle audio messages
       if (parsedFrame?.audio) {
+        console.debug('Audio frame received, length:', parsedFrame.audio.audio.length);
         AI_AUDIO.enqueueAudioFromProto(arrayBuffer);
       }
       
@@ -60,13 +72,18 @@ function handleWebSocketMessage(event) {
       }
     } catch (error) {
       console.error('Error decoding message:', error);
+      console.error('ArrayBuffer size:', arrayBuffer.byteLength);
+      AI_TRANSCRIPT.addMessageToTranscript('Error processing message from server', 'system');
     }
+  } else {
+    console.warn('Received message but AI_STATE.isPlaying is false or Frame is not initialized');
   }
 }
 
 // Handle WebSocket open event
 function handleWebSocketOpen(event) {
-  console.log('WebSocket connection established.', event);
+  console.log('WebSocket connection established!', event);
+  AI_TRANSCRIPT.addMessageToTranscript('Connected to server', 'system');
 
   navigator.mediaDevices.getUserMedia({
     audio: {
@@ -77,6 +94,7 @@ function handleWebSocketOpen(event) {
       noiseSuppression: true,
     }
   }).then((stream) => {
+    console.log('Microphone access granted, setting up audio processing');
     AI_AUDIO.microphoneStream = stream;
     
     // Create script processor for audio processing
@@ -96,7 +114,10 @@ function handleWebSocketOpen(event) {
 
     // Set up audio processing
     setupAudioProcessing();
-  }).catch((error) => console.error('Error accessing microphone:', error));
+  }).catch((error) => {
+    console.error('Error accessing microphone:', error);
+    AI_TRANSCRIPT.addMessageToTranscript('Error accessing microphone. Please check permissions.', 'system');
+  });
 }
 
 // Set up audio processing with speech detection
@@ -106,6 +127,12 @@ function setupAudioProcessing() {
   
   AI_AUDIO.scriptProcessor.onaudioprocess = (event) => {
     if (!ws || !AI_CONFIG.Frame) {
+      console.warn('WebSocket or Frame not initialized in audio processing');
+      return;
+    }
+
+    if (ws.readyState !== WebSocket.OPEN) {
+      console.warn('WebSocket not in OPEN state, readyState:', ws.readyState);
       return;
     }
 
@@ -225,6 +252,7 @@ function handleBotInterruption() {
 // Close WebSocket connection
 function closeWebSocket() {
   if (ws) {
+    console.log('Closing WebSocket connection');
     ws.close();
     ws = null;
   }

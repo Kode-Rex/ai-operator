@@ -34,15 +34,34 @@ class AIResponseProcessor(FrameProcessor):
     to indicate they're AI responses, which the client can interpret.
     """
     
+    def __init__(self):
+        """Initialize the AIResponseProcessor.
+        
+        This calls the parent class initializer to ensure all required
+        attributes are properly set up.
+        """
+        super().__init__()
+        logger.debug("AIResponseProcessor initialized")
+    
     async def process_frame(self, frame, direction):
-        """Process a frame, marking TextFrames as AI responses."""
+        """Process a frame, marking TextFrames as AI responses.
+        
+        Args:
+            frame: The frame to process
+            direction: The direction the frame is traveling in the pipeline
+            
+        Returns:
+            A list containing the processed frame
+        """
         # If this is a text frame from the LLM, mark it as an AI response
         if isinstance(frame, TextFrame):
             logger.debug(f"Marking TextFrame as AI response: {frame.text[:30]}...")
             # Set a special name property to identify this as an AI response
             frame.name = "ai_response"
+            logger.debug(f"Frame name set to: {frame.name}")
         
-        return [frame]
+        # Call the parent class's process_frame method to ensure proper frame handling
+        return await super().process_frame(frame, direction)
 
 
 class SessionTimeoutHandler:
