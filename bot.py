@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from loguru import logger
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.frames.frames import BotInterruptionFrame, EndFrame, TextFrame
+from pipecat.frames.frames import BotInterruptionFrame, EndFrame, TextFrame, TranscriptionFrame
 from pipecat.pipeline.pipeline import FrameProcessor, Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -27,11 +27,11 @@ logger.add(sys.stderr, level="DEBUG")
 
 
 class AIResponseProcessor(FrameProcessor):
-    """Processor that captures LLM text output and marks it as AI response.
+    """Processor that captures LLM text output and creates TranscriptionFrames for UI display.
     
     This processor sits between the LLM and TTS in the pipeline.
-    It takes TextFrames from the LLM and adds a special name property
-    to indicate they're AI responses, which the client can interpret.
+    It takes TextFrames from the LLM and creates corresponding TranscriptionFrames
+    with a special user_id to identify them as AI responses in the UI.
     """
     
     def __init__(self):
@@ -44,24 +44,35 @@ class AIResponseProcessor(FrameProcessor):
         logger.debug("AIResponseProcessor initialized")
     
     async def process_frame(self, frame, direction):
-        """Process a frame, marking TextFrames as AI responses.
+        """Process a frame, creating TranscriptionFrames for AI responses.
         
         Args:
             frame: The frame to process
             direction: The direction the frame is traveling in the pipeline
             
         Returns:
-            A list containing the processed frame
+            A list containing the original frame and possibly a new TranscriptionFrame
         """
-        # If this is a text frame from the LLM, mark it as an AI response
+        frames_to_return = [frame]  # Always include the original frame
+        
+        # If this is a text frame from the LLM, create a TranscriptionFrame for UI display
         if isinstance(frame, TextFrame):
-            logger.debug(f"Marking TextFrame as AI response: {frame.text[:30]}...")
-            # Set a special name property to identify this as an AI response
-            frame.name = "ai_response"
-            logger.debug(f"Frame name set to: {frame.name}")
+            logger.debug(f"Converting TextFrame to TranscriptionFrame for UI display: {frame.text[:30]}...")
+            
+            # Create a TranscriptionFrame with the same text but special user_id
+            transcription_frame = TranscriptionFrame(
+                text=frame.text,
+                user_id="ai_assistant",  # Special user_id to identify AI responses
+                timestamp=str(asyncio.get_event_loop().time())
+            )
+            
+            logger.debug(f"Created TranscriptionFrame with user_id: {transcription_frame.user_id}")
+            
+            # Add the new TranscriptionFrame to the list of frames to return
+            frames_to_return.append(transcription_frame)
         
         # Call the parent class's process_frame method to ensure proper frame handling
-        return await super().process_frame(frame, direction)
+        return await super().process_frame(frames_to_return, direction)
 
 
 class SessionTimeoutHandler:
@@ -176,7 +187,7 @@ class Bot:
                 self.stt,  # Speech-To-Text
                 self.context_aggregator.user(),
                 self.llm,  # LLM
-                self.ai_response_processor,  # Process LLM output to mark AI responses
+                self.ai_response_processor,  # Process LLM output to create TranscriptionFrames for UI
                 self.tts,  # Text-To-Speech
                 self.transport.output(),  # Websocket output to client
                 self.context_aggregator.assistant(),

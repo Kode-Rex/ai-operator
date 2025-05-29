@@ -45,10 +45,20 @@ function handleWebSocketMessage(event) {
       if (parsedFrame?.transcription) {
         console.log('Transcription received:', parsedFrame.transcription);
         console.log('Transcription text:', parsedFrame.transcription.text);
-        AI_TRANSCRIPT.addMessageToTranscript(parsedFrame.transcription.text, 'user');
+        console.log('Transcription user_id:', parsedFrame.transcription.user_id);
+        
+        // Check if this is an AI response (user_id="ai_assistant")
+        if (parsedFrame.transcription.user_id === "ai_assistant") {
+          console.log('AI Response detected via TranscriptionFrame!');
+          console.log('AI Response content:', parsedFrame.transcription.text);
+          AI_TRANSCRIPT.addMessageToTranscript(parsedFrame.transcription.text, 'ai');
+        } else {
+          // Regular user transcription
+          AI_TRANSCRIPT.addMessageToTranscript(parsedFrame.transcription.text, 'user');
+        }
       }
       
-      // Handle ALL text frames - more aggressive approach
+      // Handle text frames (for backward compatibility)
       if (parsedFrame?.text) {
         // Log detailed structure of the text frame
         console.log('TextFrame DETECTED!', parsedFrame.text);
