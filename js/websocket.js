@@ -36,6 +36,12 @@ function handleWebSocketMessage(event) {
         AI_TRANSCRIPT.addMessageToTranscript(parsedFrame.transcription.text, 'user');
       }
       
+      // Handle AI response messages
+      if (parsedFrame?.aiResponse) {
+        console.log('AI Response:', parsedFrame.aiResponse.text); // Log AI text response
+        AI_TRANSCRIPT.addMessageToTranscript(parsedFrame.aiResponse.text, 'ai');
+      }
+      
       // Handle audio messages
       if (parsedFrame?.audio) {
         AI_AUDIO.enqueueAudioFromProto(arrayBuffer);

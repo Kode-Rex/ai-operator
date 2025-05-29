@@ -6,11 +6,12 @@ from dotenv import load_dotenv
 from loguru import logger
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.frames.frames import BotInterruptionFrame, EndFrame
+from pipecat.frames.frames import AIResponseFrame, BotInterruptionFrame, EndFrame, TextFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
+from pipecat.processors.processor import Processor
 from pipecat.serializers.protobuf import ProtobufFrameSerializer
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
@@ -24,6 +25,27 @@ load_dotenv(override=True)
 
 logger.remove(0)
 logger.add(sys.stderr, level="DEBUG")
+
+
+class AIResponseProcessor(Processor):
+    """Processor that captures LLM text output and creates AIResponseFrames.
+    
+    This processor sits between the LLM and TTS in the pipeline.
+    It takes TextFrames from the LLM, creates AIResponseFrames with the same text,
+    and passes both frames downstream.
+    """
+    
+    async def process_frame(self, frame):
+        """Process a frame, creating an AIResponseFrame if it's a TextFrame."""
+        frames_to_return = [frame]
+        
+        # If this is a text frame from the LLM, create an AIResponseFrame
+        if isinstance(frame, TextFrame):
+            logger.debug(f"Creating AIResponseFrame from TextFrame: {frame.text[:30]}...")
+            ai_response_frame = AIResponseFrame(text=frame.text)
+            frames_to_return.append(ai_response_frame)
+        
+        return frames_to_return
 
 
 class SessionTimeoutHandler:
@@ -85,6 +107,7 @@ class Bot:
         self.pipeline = None
         self.task = None
         self.runner = None
+        self.ai_response_processor = None
         self.messages = [
             {
                 "role": "system",
@@ -128,12 +151,16 @@ class Bot:
     
     def setup_pipeline(self):
         """Set up the processing pipeline."""
+        # Create the AI response processor
+        self.ai_response_processor = AIResponseProcessor()
+        
         self.pipeline = Pipeline(
             [
                 self.transport.input(),  # Websocket input from client
                 self.stt,  # Speech-To-Text
                 self.context_aggregator.user(),
                 self.llm,  # LLM
+                self.ai_response_processor,  # Process LLM output to create AIResponseFrames
                 self.tts,  # Text-To-Speech
                 self.transport.output(),  # Websocket output to client
                 self.context_aggregator.assistant(),
