@@ -6,12 +6,11 @@ from dotenv import load_dotenv
 from loguru import logger
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.frames.frames import AIResponseFrame, BotInterruptionFrame, EndFrame, TextFrame
-from pipecat.pipeline.pipeline import Pipeline
+from pipecat.frames.frames import BotInterruptionFrame, EndFrame, TextFrame
+from pipecat.pipeline.pipeline import FrameProcessor, Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
-from pipecat.processors.processor import Processor
 from pipecat.serializers.protobuf import ProtobufFrameSerializer
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
@@ -27,25 +26,23 @@ logger.remove(0)
 logger.add(sys.stderr, level="DEBUG")
 
 
-class AIResponseProcessor(Processor):
-    """Processor that captures LLM text output and creates AIResponseFrames.
+class AIResponseProcessor(FrameProcessor):
+    """Processor that captures LLM text output and marks it as AI response.
     
     This processor sits between the LLM and TTS in the pipeline.
-    It takes TextFrames from the LLM, creates AIResponseFrames with the same text,
-    and passes both frames downstream.
+    It takes TextFrames from the LLM and adds a special name property
+    to indicate they're AI responses, which the client can interpret.
     """
     
-    async def process_frame(self, frame):
-        """Process a frame, creating an AIResponseFrame if it's a TextFrame."""
-        frames_to_return = [frame]
-        
-        # If this is a text frame from the LLM, create an AIResponseFrame
+    async def process_frame(self, frame, direction):
+        """Process a frame, marking TextFrames as AI responses."""
+        # If this is a text frame from the LLM, mark it as an AI response
         if isinstance(frame, TextFrame):
-            logger.debug(f"Creating AIResponseFrame from TextFrame: {frame.text[:30]}...")
-            ai_response_frame = AIResponseFrame(text=frame.text)
-            frames_to_return.append(ai_response_frame)
+            logger.debug(f"Marking TextFrame as AI response: {frame.text[:30]}...")
+            # Set a special name property to identify this as an AI response
+            frame.name = "ai_response"
         
-        return frames_to_return
+        return [frame]
 
 
 class SessionTimeoutHandler:
@@ -160,7 +157,7 @@ class Bot:
                 self.stt,  # Speech-To-Text
                 self.context_aggregator.user(),
                 self.llm,  # LLM
-                self.ai_response_processor,  # Process LLM output to create AIResponseFrames
+                self.ai_response_processor,  # Process LLM output to mark AI responses
                 self.tts,  # Text-To-Speech
                 self.transport.output(),  # Websocket output to client
                 self.context_aggregator.assistant(),

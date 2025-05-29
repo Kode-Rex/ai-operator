@@ -25,12 +25,6 @@ message TranscriptionFrame {
   string timestamp = 5;
 }
 
-message AIResponseFrame {
-  uint64 id = 1;
-  string name = 2;
-  string text = 3;
-}
-
 message BotInterruptionFrame {
   uint64 id = 1;
 }
@@ -46,6 +40,5 @@ message Frame {
     TranscriptionFrame transcription = 3;
     BotInterruptionFrame botInterruption = 4;
     EndFrame end = 5;
-    AIResponseFrame aiResponse = 6;
   }
 }
