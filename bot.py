@@ -19,6 +19,42 @@ from pipecat.transports.network.websocket_server import (
     WebsocketServerParams,
     WebsocketServerTransport,
 )
+import datetime
+from processors import TextTranscriptionProcessor
+from pipecat.frames.frames import TextFrame, TranscriptionFrame
+from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
+
+# Custom AIResponseProcessor class for compatibility with tests
+class AIResponseProcessor(FrameProcessor):
+    """
+    Processor that converts Text frames to transcription frames with 'ai_assistant' user_id.
+    This is used for test compatibility.
+    """
+    def __init__(self):
+        super().__init__()
+    
+    async def process_frame(self, frame, direction=None):
+        # Call the parent's process_frame method first
+        await super().process_frame(frame, direction)
+        
+        result = [frame]
+        
+        # If this is a TextFrame, create a transcription frame
+        if isinstance(frame, TextFrame):
+            text = frame.text if hasattr(frame, 'text') else ""
+            
+            # Create a TranscriptionFrame
+            timestamp = datetime.datetime.now().isoformat()
+            
+            transcription_frame = TranscriptionFrame(
+                text=text,
+                user_id="ai_assistant",
+                timestamp=timestamp
+            )
+            
+            result.append(transcription_frame)
+        
+        return result
 
 load_dotenv(override=True)
 
@@ -85,6 +121,7 @@ class Bot:
         self.pipeline = None
         self.task = None
         self.runner = None
+        self.ai_response_processor = None
         self.messages = [
             {
                 "role": "system",
@@ -128,6 +165,8 @@ class Bot:
     
     def setup_pipeline(self):
         """Set up the processing pipeline."""
+        self.ai_response_processor = AIResponseProcessor()
+        
         self.pipeline = Pipeline(
             [
                 self.transport.input(),  # Websocket input from client
