@@ -50,6 +50,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+jest-coverage/
 
 # Translations
 *.mo
@@ -124,6 +125,11 @@ __pypackages__/
 celerybeat-schedule
 celerybeat.pid
 
+# npm/yarn
+package-lock.json
+yarn.lock
+.npm
+
 # SageMath parsed files
 *.sage.py
 
@@ -173,3 +179,13 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 .windsurfrules.txt
+
+# JavaScript related
+coverage/
+node_modules/
+package-lock.json
+npm-debug.log*
+
+# Keep test files (don't ignore these)
+# js/__tests__/
+# __mocks__/

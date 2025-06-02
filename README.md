@@ -4,6 +4,8 @@ This project implements a low-latency, real-time voice conversation system with 
 
 See it in action: https://www.youtube.com/watch?v=iPqDASo2gsQ
 
+[![Backend Tests](https://img.shields.io/badge/backend_tests-pytest-green.svg)](https://docs.pytest.org/en/stable/) [![Frontend Tests](https://img.shields.io/badge/frontend_tests-jest-red.svg)](https://jestjs.io/)
+
 ## Key Features
 
 - **Real-time voice conversations** with GPT-4o
@@ -53,6 +55,45 @@ python -m http.server
 
 Then, visit `http://localhost:8000` in your browser to start a conversation.
 
+### Run the Tests
+
+#### Python Backend Tests
+
+```bash
+# Run all Python tests
+pytest
+
+# Run with coverage report
+pytest --cov=. --cov-report=html
+
+# Run only unit tests
+pytest tests/unit/
+
+# Run only integration tests
+pytest tests/integration/
+```
+
+#### JavaScript Frontend Tests
+
+```bash
+# Run all JavaScript tests
+npm test
+
+# Run with coverage
+npm run test:coverage
+
+# Run tests in watch mode (for development)
+npm run test:watch
+```
+
+#### Run All Tests
+
+For convenience, you can run all tests (both backend and frontend) with:
+
+```bash
+./run_tests.sh
+```
+
 ## Technical Architecture
 
 The system uses a pipeline architecture:
@@ -63,3 +104,39 @@ The system uses a pipeline architecture:
 5. Audio is streamed back to client for playback
 
 Voice detection monitors audio levels and triggers interruption handling when the user starts speaking during AI responses.
+
+## Testing
+
+The project has comprehensive test coverage for both backend and frontend components.
+
+### Backend Testing
+
+The Python backend uses pytest for testing. Tests are organized into:
+
+- **Unit Tests**: Test individual components in isolation
+- **Integration Tests**: Test interactions between components
+
+The backend test suite includes:
+- Bot initialization and configuration
+- Pipeline setup and component connections
+- Text processing and transformation
+- Session timeout handling
+- Event handling
+
+To write new Python tests, add them to the appropriate directory under `tests/`.
+
+### Frontend Testing
+
+The JavaScript frontend uses Jest for testing. Tests are organized by component:
+
+- **Unit Tests**: Test individual JS modules
+- **UI Tests**: Test DOM interactions and UI updates
+
+The frontend test suite includes:
+- Configuration validation
+- UI state management
+- Audio processing
+- WebSocket communication
+- Event handling
+
+To write new JavaScript tests, add them to the `js/__tests__/` directory.

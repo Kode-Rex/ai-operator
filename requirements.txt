@@ -1,2 +1,6 @@
 python-dotenv
 pipecat-ai[cartesia,openai,silero,websocket,deepgram]
+pytest
+pytest-asyncio
+pytest-cov
+pytest-mock
