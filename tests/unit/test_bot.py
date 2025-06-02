@@ -5,6 +5,29 @@ from unittest.mock import MagicMock, AsyncMock, patch
 
 from bot import Bot, SessionTimeoutHandler
 
+@pytest.mark.asyncio
+async def test_main():
+    """Test the main function."""
+    # Create a mock Bot
+    with patch('bot.Bot') as mock_bot_class:
+        # Create a mock bot instance
+        mock_bot = MagicMock()
+        mock_bot_class.return_value = mock_bot
+        
+        # Mock the initialize and run methods
+        mock_bot.initialize = MagicMock()
+        mock_bot.run = AsyncMock()
+        
+        # Call the main function
+        from bot import main
+        await main()
+        
+        # Check that the methods were called
+        mock_bot_class.assert_called_once()
+        mock_bot.initialize.assert_called_once()
+        mock_bot.run.assert_called_once()
+
+
 class TestBot:
     """Unit tests for the Bot class."""
 
@@ -29,19 +52,45 @@ class TestBot:
         assert bot.messages[0]["role"] == "system"
         assert "You are a helpful LLM" in bot.messages[0]["content"]
 
-    def test_setup_transport(self):
+    @patch('bot.WebsocketServerTransport')
+    @patch('bot.WebsocketServerParams')
+    @patch('bot.ProtobufFrameSerializer')
+    @patch('bot.SileroVADAnalyzer')
+    def test_setup_transport(self, mock_silero, mock_serializer, mock_params, mock_transport):
         """Test that transport is set up correctly."""
-        # We'll skip the actual setup_transport call since it has validation
-        # and instead mock it directly
-        bot = Bot()
+        # Set up the mocks to avoid validation errors
+        mock_silero_instance = MagicMock()
+        mock_silero.return_value = mock_silero_instance
         
-        # Create a mock for the transport
-        mock_transport = MagicMock()
-        bot.transport = mock_transport
+        mock_serializer_instance = MagicMock()
+        mock_serializer.return_value = mock_serializer_instance
+        
+        mock_params_instance = MagicMock()
+        mock_params.return_value = mock_params_instance
+        
+        mock_transport_instance = MagicMock()
+        mock_transport.return_value = mock_transport_instance
+        
+        bot = Bot()
+        transport = bot.setup_transport()
+        
+        # Check that WebsocketServerParams was called with the expected params
+        mock_params.assert_called_once_with(
+            serializer=mock_serializer_instance,
+            audio_out_enabled=True,
+            add_wav_header=True,
+            vad_enabled=True,
+            vad_analyzer=mock_silero_instance,
+            vad_audio_passthrough=True,
+            session_timeout=60 * 3,  # 3 minutes
+        )
+        
+        # Check that WebsocketServerTransport was called with the params
+        mock_transport.assert_called_once_with(params=mock_params_instance)
         
         # Assert that we can set and retrieve the transport
-        assert bot.transport is not None
-        assert bot.transport == mock_transport
+        assert bot.transport is mock_transport_instance
+        assert transport == mock_transport_instance
 
     @patch('bot.OpenAILLMService')
     @patch('bot.DeepgramSTTService')
@@ -101,10 +150,21 @@ class TestBot:
         bot = Bot()
         bot.transport = mock_websocket_transport
         bot.task = MagicMock()
+        bot.task.queue_frames = AsyncMock()
         bot.context_aggregator = MagicMock()
         bot.context_aggregator.user = MagicMock(return_value=MagicMock())
         bot.context_aggregator.user().get_context_frame = MagicMock(return_value="frame")
         bot.tts = MagicMock()
+        
+        # Setup mock decorator
+        handler_funcs = {}
+        def mock_decorator(event_name):
+            def wrapper(func):
+                handler_funcs[event_name] = func
+                return func
+            return wrapper
+        
+        mock_websocket_transport.event_handler.side_effect = mock_decorator
         
         bot.setup_event_handlers()
         
@@ -112,6 +172,23 @@ class TestBot:
         assert mock_websocket_transport.event_handler.call_count == 2
         mock_websocket_transport.event_handler.assert_any_call("on_client_connected")
         mock_websocket_transport.event_handler.assert_any_call("on_session_timeout")
+        
+        # Test on_client_connected handler
+        assert "on_client_connected" in handler_funcs
+        mock_client = MagicMock()
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(handler_funcs["on_client_connected"](bot.transport, mock_client))
+        
+        # Check that the message was added
+        assert len(bot.messages) > 1
+        assert "Please introduce yourself to the user" in bot.messages[-1]["content"]
+        
+        # Check that queue_frames was called
+        bot.task.queue_frames.assert_called_once_with([bot.context_aggregator.user().get_context_frame()])
+        
+        # Test on_session_timeout handler
+        assert "on_session_timeout" in handler_funcs
+        # We can't easily test this completely as it creates a new SessionTimeoutHandler
 
     @patch('bot.PipelineRunner')
     def test_initialize(self, mock_pipeline_runner):
@@ -171,13 +248,35 @@ class TestSessionTimeoutHandler:
         # Mock the _end_call method to avoid waiting
         handler._end_call = AsyncMock()
         
-        # Call the method
-        await handler.handle_timeout("test_client")
+        # Instead of mocking asyncio.create_task which leads to comparison issues with coroutines,
+        # we'll patch the entire method with our own implementation
+        original_create_task = asyncio.create_task
         
-        # Check that methods were called correctly
-        mock_task.queue_frames.assert_called_once()
-        mock_tts.say.assert_called_once()
-        handler._end_call.assert_called_once()
+        def mock_create_task_impl(coro):
+            # Just store the coroutine and return a mock
+            mock_task_obj = MagicMock()
+            handler.background_tasks.add(mock_task_obj)
+            mock_task_obj.add_done_callback = MagicMock()
+            return mock_task_obj
+            
+        # Replace create_task with our implementation
+        asyncio.create_task = mock_create_task_impl
+        
+        try:
+            # Call the method
+            await handler.handle_timeout("test_client")
+            
+            # Check that methods were called correctly
+            mock_task.queue_frames.assert_called_once()
+            mock_tts.say.assert_called_once_with(
+                "I'm sorry, we are ending the call now. Please feel free to reach out again if you need assistance."
+            )
+            
+            # Check that the task was added to background_tasks
+            assert len(handler.background_tasks) == 1
+        finally:
+            # Restore original function
+            asyncio.create_task = original_create_task
     
     @pytest.mark.asyncio
     async def test_end_call(self):
@@ -191,10 +290,19 @@ class TestSessionTimeoutHandler:
         handler = SessionTimeoutHandler(mock_task, mock_tts)
         
         # Mock sleep to avoid waiting
-        with patch('asyncio.sleep', AsyncMock()):
+        with patch('asyncio.sleep', AsyncMock()) as mock_sleep:
             await handler._end_call()
+            
+            # Check that sleep was called with the right duration
+            mock_sleep.assert_called_once_with(15)
             
             # Check that queue_frames was called with both frames
             mock_task.queue_frames.assert_called_once()
             # Check that the call contained two frames
             assert len(mock_task.queue_frames.call_args[0][0]) == 2
+            
+            # Check that the frames are of the right types
+            from pipecat.frames.frames import BotInterruptionFrame, EndFrame
+            frames = mock_task.queue_frames.call_args[0][0]
+            assert isinstance(frames[0], BotInterruptionFrame)
+            assert isinstance(frames[1], EndFrame)
