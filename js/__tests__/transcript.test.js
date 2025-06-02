@@ -27,6 +27,9 @@ beforeEach(() => {
     return null;
   });
   
+  // Create storage for mock elements
+  const mockElements = [];
+  
   // Mock document.createElement
   document.createElement = jest.fn((type) => {
     const element = {
@@ -34,8 +37,12 @@ beforeEach(() => {
       textContent: '',
       appendChild: jest.fn()
     };
+    mockElements.push(element);
     return element;
   });
+  
+  // Add mockElements to global for access in tests
+  global.mockElements = mockElements;
   
   // Reset window
   global.window = { ...originalWindow };
@@ -61,58 +68,51 @@ describe('Transcript Module', () => {
     expect(typeof window.AI_TRANSCRIPT.clearTranscript).toBe('function');
   });
   
-  // Skipping test due to issues with mocking DOM manipulation
-  test.skip('addMessageToTranscript should create and append message elements', () => {
-    // Create a fresh mock implementation for this test
+  test('addMessageToTranscript should create and append message elements', () => {
+    // First clean any existing modules
     jest.resetModules();
     
-    // Mock document.createElement before requiring the module
+    // Create mocks with spies
     const mockMessageDiv = {
       className: '',
-      appendChild: jest.fn(),
-      textContent: ''
+      appendChild: jest.fn()
     };
     
     const mockAvatar = {
       className: '',
-      textContent: '',
+      textContent: ''
     };
     
     const mockContent = {
       className: '',
-      textContent: '',
+      textContent: ''
     };
     
+    // Setup document.createElement to return our mocks
     document.createElement = jest.fn()
-      .mockReturnValueOnce(mockMessageDiv)   // First call for messageDiv
-      .mockReturnValueOnce(mockAvatar)       // Second call for avatar
-      .mockReturnValueOnce(mockContent);     // Third call for content
+      .mockReturnValueOnce(mockMessageDiv)  // First call returns message div
+      .mockReturnValueOnce(mockAvatar)      // Second call returns avatar div
+      .mockReturnValueOnce(mockContent);    // Third call returns content div
     
-    // Import the module under test AFTER setting up mocks
+    // Create a spy for the container's appendChild
+    mockTranscriptContainer.appendChild = jest.fn();
+    
+    // Import the module
     require('../transcript.js');
     
-    // Call addMessageToTranscript
+    // Call the function
     window.AI_TRANSCRIPT.addMessageToTranscript('Hello, world!', 'user');
     
-    // Check that createElement was called 3 times (for messageDiv, avatar, content)
+    // Verify createElement was called for all three elements
     expect(document.createElement).toHaveBeenCalledTimes(3);
     
-    // Check that it created a div for the message
-    expect(document.createElement).toHaveBeenCalledWith('div');
-    
-    // Check that messageDiv's appendChild was called twice (for avatar and content)
-    expect(mockMessageDiv.appendChild).toHaveBeenCalledTimes(2);
-    
-    // Mock the appendChild method on the transcriptContainer
-    mockTranscriptContainer.appendChild.mockImplementation(() => {});
-    
-    // Call the function again to ensure appendChild is called
-    window.AI_TRANSCRIPT.addMessageToTranscript('Another test', 'user');
-    
-    // Now check that appendChild was called
+    // Verify the container's appendChild was called with our mockMessageDiv
     expect(mockTranscriptContainer.appendChild).toHaveBeenCalled();
     
-    // Check that scrollTop was set to scrollHeight
+    // Verify the message div's appendChild was called twice (for avatar and content)
+    expect(mockMessageDiv.appendChild).toHaveBeenCalledTimes(2);
+    
+    // Verify scrollTop was set to scrollHeight
     expect(mockTranscriptContainer.scrollTop).toBe(mockTranscriptContainer.scrollHeight);
   });
   
@@ -151,22 +151,26 @@ describe('Transcript Module', () => {
     expect(createdElements[1].textContent).toBe('S');
   });
   
-  // Skipping test due to issues with mocking DOM manipulation
-  test.skip('clearTranscript should empty the container', () => {
-    // Reset modules to get a fresh state
+  test('clearTranscript should empty the container', () => {
+    // Reset modules to get a clean slate
     jest.resetModules();
     
-    // Set innerHTML property on the mock container
-    mockTranscriptContainer.innerHTML = 'Some content';
+    // Create a mock with a proper innerHTML property that we can track
+    const mockContainer = {
+      innerHTML: 'Some content'
+    };
     
-    // Import the module under test
+    // Set up getElementById to return our mock
+    document.getElementById = jest.fn().mockReturnValue(mockContainer);
+    
+    // Import the module to test
     require('../transcript.js');
     
     // Call clearTranscript
     window.AI_TRANSCRIPT.clearTranscript();
     
-    // Check that innerHTML was set to empty
-    expect(mockTranscriptContainer.innerHTML).toBe('');
+    // Check that innerHTML was set to empty string
+    expect(mockContainer.innerHTML).toBe('');
   });
   
   test('clearTranscript should handle case when container is not found', () => {
