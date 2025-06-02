@@ -4,6 +4,8 @@ This project implements a low-latency, real-time voice conversation system with 
 
 See it in action: https://www.youtube.com/watch?v=iPqDASo2gsQ
 
+[![Tests](https://img.shields.io/badge/tests-pytest-green.svg)](https://docs.pytest.org/en/stable/)
+
 ## Key Features
 
 - **Real-time voice conversations** with GPT-4o
@@ -53,6 +55,22 @@ python -m http.server
 
 Then, visit `http://localhost:8000` in your browser to start a conversation.
 
+### Run the Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage report
+pytest --cov=. --cov-report=html
+
+# Run only unit tests
+pytest tests/unit/
+
+# Run only integration tests
+pytest tests/integration/
+```
+
 ## Technical Architecture
 
 The system uses a pipeline architecture:
@@ -63,3 +81,19 @@ The system uses a pipeline architecture:
 5. Audio is streamed back to client for playback
 
 Voice detection monitors audio levels and triggers interruption handling when the user starts speaking during AI responses.
+
+## Testing
+
+The project uses pytest for testing. Tests are organized into:
+
+- **Unit Tests**: Test individual components in isolation
+- **Integration Tests**: Test interactions between components
+
+The test suite includes:
+- Bot initialization and configuration
+- Pipeline setup and component connections
+- Text processing and transformation
+- Session timeout handling
+- Event handling
+
+To write new tests, add them to the appropriate directory under `tests/`.
