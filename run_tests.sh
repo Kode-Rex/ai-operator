@@ -34,9 +34,13 @@ pytest tests/unit/ -v
 echo -e "\n${YELLOW}Running integration tests...${NC}"
 pytest tests/integration/ -v
 
+echo -e "\n${YELLOW}Running text transcription processor tests...${NC}"
+pytest tests/unit/test_text_transcription_processor.py -v
+
 echo -e "\n${YELLOW}Running full test suite with coverage...${NC}"
 pytest --cov=. --cov-report=term --cov-report=html
 
 echo -e "\n${GREEN}Tests completed!${NC}"
 echo -e "Coverage report has been generated in the 'htmlcov' directory"
 echo -e "Open htmlcov/index.html in a browser to view the report"
+echo -e "\nTest summary report available in TEST_REPORT.md"
